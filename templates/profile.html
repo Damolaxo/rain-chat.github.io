@@ -1,18 +1,18 @@
 {% extends "base.html" %}
+{% block title %}Profile — RAIN Chat{% endblock %}
+
 {% block content %}
-<div class="profile-container">
-    <h2>Your Profile</h2>
-    <form method="POST" enctype="multipart/form-data">
-        <label>Name:</label>
-        <input type="text" name="name" value="{{ user.name }}"><br>
-        <label>Bio:</label>
-        <textarea name="bio">{{ user.bio }}</textarea><br>
-        <label>Avatar:</label>
-        {% if user.avatar %}
-            <img src="{{ url_for('uploaded_file', filename=user.avatar.split('/')[-1]) }}" alt="Avatar" width="100"><br>
-        {% endif %}
-        <input type="file" name="avatar"><br>
-        <button type="submit">Update Profile</button>
-    </form>
+<div class="form-center-card">
+  <h2>Your Profile</h2>
+  <form method="POST" enctype="multipart/form-data" class="form-stack">
+    {{ form.hidden_tag() }}
+    <label>{{ form.name.label }}</label>
+    {{ form.name(class="input") }}
+    <label>{{ form.bio.label }}</label>
+    {{ form.bio(class="input") }}
+    <label>{{ form.avatar.label }}</label>
+    {{ form.avatar() }}
+    {{ form.submit(class="btn btn-gold full-width") }}
+  </form>
 </div>
 {% endblock %}
