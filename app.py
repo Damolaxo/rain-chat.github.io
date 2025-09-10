@@ -1,3 +1,8 @@
+# app.py — fixed version (eventlet monkey-patch + index public + login_manager rename)
+
+import eventlet
+eventlet.monkey_patch()
+
 import os
 from datetime import datetime, timedelta
 from flask import Flask, render_template, redirect, url_for, flash, request, send_from_directory, abort
@@ -11,6 +16,9 @@ from better_profanity import profanity
 # --- Config ---
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static', 'uploads')
+# don't forcibly create uploads if it already exists in the repo/environment
+if not os.path.isdir(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-me')
@@ -21,8 +29,12 @@ app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
-login = LoginManager(app)
-socketio = SocketIO(app, cors_allowed_origins="*", manage_session=False)  # manage_session False to let Flask-Login handle sessions
+
+# rename LoginManager instance to avoid clobbering by a view named `login`
+login_manager = LoginManager(app)
+login_manager.login_view = "login"  # when a login-required route is hit, redirect to this endpoint
+
+socketio = SocketIO(app, cors_allowed_origins="*", manage_session=False)  # use eventlet worker for deployment
 
 profanity.load_censor_words()
 
@@ -30,10 +42,10 @@ profanity.load_censor_words()
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)  # for demo storing plaintext is bad; hash in real app
+    password = db.Column(db.String(200), nullable=False)  # HASH IN PRODUCTION
     name = db.Column(db.String(120))
     bio = db.Column(db.Text)
-    avatar = db.Column(db.String(300))  # filename/url
+    avatar = db.Column(db.String(300))  # filename/url (e.g. uploads/xyz.png)
     is_admin = db.Column(db.Boolean, default=False)
     banned = db.Column(db.Boolean, default=False)
     muted_until = db.Column(db.DateTime, nullable=True)
@@ -52,21 +64,21 @@ class Message(db.Model):
     media = db.Column(db.String(300), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-# --- Simple forms (very minimal, replace with WTForms in production) ---
-# For brevity we do simple request.form parsing; forms.py could hold WTForms
-
 # --- Login loader ---
-@login.user_loader
+@login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
 # --- Routes ---
+
+# Public landing page — NOT protected (no login required)
 @app.route('/')
-@login_required
 def index():
-    rooms = Room.query.order_by(Room.name).all()
+    # show a simple landing page; if logged in, show quick link to chat
+    rooms = Room.query.order_by(Room.name).all() if current_user.is_authenticated else []
     return render_template('index.html', rooms=rooms)
 
+# Register
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
@@ -76,6 +88,7 @@ def register():
         if User.query.filter_by(username=username).first():
             flash('Username taken', 'danger')
             return redirect(url_for('register'))
+        # NOTE: Hash password in production (werkzeug.security.generate_password_hash)
         u = User(username=username, password=password, name=name)
         db.session.add(u)
         db.session.commit()
@@ -84,12 +97,14 @@ def register():
         return redirect(url_for('profile'))
     return render_template('register.html')
 
+# Login
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form['username']
         pw = request.form['password']
         user = User.query.filter_by(username=username).first()
+        # NOTE: Use check_password_hash in production
         if not user or user.password != pw:
             flash('Invalid credentials', 'danger')
             return redirect(url_for('login'))
@@ -97,15 +112,17 @@ def login():
             flash('You are banned', 'danger')
             return redirect(url_for('login'))
         login_user(user)
-        return redirect(url_for('index'))
+        return redirect(url_for('chat'))  # send to chat after login
     return render_template('login.html')
 
+# Logout
 @app.route('/logout')
 @login_required
 def logout():
     logout_user()
-    return redirect(url_for('login'))
+    return redirect(url_for('index'))
 
+# Protected profile route
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():
@@ -121,37 +138,44 @@ def profile():
         db.session.commit()
         flash('Profile updated', 'success')
         return redirect(url_for('profile'))
-    return render_template('profile.html')
+    return render_template('profile.html', user=current_user)
 
+# Protected chat landing — requires login
+@app.route('/chat')
+@login_required
+def chat():
+    rooms = Room.query.order_by(Room.name).all()
+    return render_template('chat_index.html', rooms=rooms)
+
+# Room view — protected
 @app.route('/room/<room_name>')
 @login_required
 def room(room_name):
     room = Room.query.filter_by(name=room_name).first_or_404()
-    if room.private:
-        # For MVP: you must be invited or admin (improvement: membership table)
-        if not current_user.is_admin:
-            flash('Private room - access denied', 'danger')
-            return redirect(url_for('index'))
-    # load recent messages
+    if room.private and not current_user.is_admin:
+        flash('Private room - access denied', 'danger')
+        return redirect(url_for('chat'))
     messages = Message.query.filter_by(room_id=room.id).order_by(Message.created_at.asc()).limit(200).all()
     return render_template('chat.html', room=room, messages=messages)
 
+# Create room
 @app.route('/create_room', methods=['POST'])
 @login_required
 def create_room():
-    name = request.form.get('name').strip()
+    name = request.form.get('name', '').strip()
     if not name:
         flash('Room name required', 'danger')
-        return redirect(url_for('index'))
+        return redirect(url_for('chat'))
     if Room.query.filter_by(name=name).first():
         flash('Room exists', 'danger')
-        return redirect(url_for('index'))
+        return redirect(url_for('chat'))
     r = Room(name=name, private=bool(request.form.get('private')))
     db.session.add(r)
     db.session.commit()
     flash('Room created', 'success')
     return redirect(url_for('room', room_name=name))
 
+# Serve uploaded files (profile pics / media)
 @app.route('/uploads/<path:filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
@@ -171,9 +195,12 @@ def handle_leave(data):
 
 @socketio.on('send_message')
 def handle_message(data):
-    text = data.get('text','').strip()
+    text = (data.get('text') or '').strip()
     room_name = data.get('room')
     if not text and not data.get('media'):
+        return
+    if current_user.is_anonymous:
+        emit('error', {'msg': 'Authentication required.'})
         return
     # moderation checks
     if current_user.banned:
@@ -202,7 +229,7 @@ def handle_message(data):
     }
     emit('new_message', payload, room=room_name)
 
-# admin actions: mute / ban / unban (simple)
+# --- Admin actions ---
 @app.route('/admin/ban/<int:user_id>')
 @login_required
 def admin_ban(user_id):
@@ -212,7 +239,7 @@ def admin_ban(user_id):
     u.banned = True
     db.session.commit()
     flash('User banned', 'info')
-    return redirect(url_for('index'))
+    return redirect(url_for('chat'))
 
 @app.route('/admin/unban/<int:user_id>')
 @login_required
@@ -223,7 +250,7 @@ def admin_unban(user_id):
     u.banned = False
     db.session.commit()
     flash('User unbanned', 'info')
-    return redirect(url_for('index'))
+    return redirect(url_for('chat'))
 
 @app.route('/admin/mute/<int:user_id>')
 @login_required
@@ -231,10 +258,10 @@ def admin_mute(user_id):
     if not current_user.is_admin:
         abort(403)
     u = User.query.get_or_404(user_id)
-    u.muted_until = datetime.utcnow() + timedelta(minutes=30)  # example
+    u.muted_until = datetime.utcnow() + timedelta(minutes=30)
     db.session.commit()
     flash('User muted for 30 minutes', 'info')
-    return redirect(url_for('index'))
+    return redirect(url_for('chat'))
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=int(os.getenv('PORT', 5000)))
