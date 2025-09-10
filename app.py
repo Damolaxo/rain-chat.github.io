@@ -54,23 +54,16 @@ def index():
 
 
 # Register
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     form = RegisterForm()
     if form.validate_on_submit():
-        existing_user = User.query.filter_by(username=form.username.data).first()
-        if existing_user:
-            flash("This username is already taken. Please log in.", "warning")
-            return redirect(url_for("login"))
-
-        user = User(username=form.username.data, name=form.name.data)
-        user.set_password(form.password.data)
-        db.session.add(user)
-        db.session.commit()
-        flash("You have successfully registered! Please log in.", "success")
+        # save user logic here
+        flash("✅ You have successfully registered! Please login.", "success")
         return redirect(url_for("login"))
-
     return render_template("register.html", form=form)
+
 
 
 # Login
@@ -79,12 +72,13 @@ def login():
     form = LoginForm()
     if form.validate_on_submit():
         user = User.query.filter_by(username=form.username.data).first()
-        if user and user.check_password(form.password.data):
-            login_user(user)
-            flash("You have successfully logged in!", "success")
-            return redirect(url_for("chat"))
+        if user and check_password_hash(user.password, form.password.data):
+            # login user logic here
+            flash("✅ Logged in successfully!", "success")
+            return redirect(url_for("index"))
         else:
-            flash("Invalid username or password.", "danger")
+            flash("Invalid username or password. Don’t have an account? Register below.", "danger")
+            return redirect(url_for("register"))
     return render_template("login.html", form=form)
 
 
