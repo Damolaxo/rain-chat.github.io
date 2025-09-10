@@ -1,5 +1,3 @@
-# app.py
-
 import eventlet
 eventlet.monkey_patch()
 
@@ -33,7 +31,6 @@ migrate = Migrate(app, db)
 
 bcrypt = Bcrypt(app)
 
-# rename LoginManager instance
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 
@@ -49,7 +46,6 @@ def load_user(user_id):
 
 
 # --- Routes ---
-
 @app.route('/')
 def index():
     """Public landing page"""
@@ -62,17 +58,19 @@ def index():
 def register():
     form = RegisterForm()
     if form.validate_on_submit():
-        user = User(
-            username=form.username.data,
-            name=form.name.data
-        )
+        existing_user = User.query.filter_by(username=form.username.data).first()
+        if existing_user:
+            flash("This username is already taken. Please log in.", "warning")
+            return redirect(url_for("login"))
+
+        user = User(username=form.username.data, name=form.name.data)
         user.set_password(form.password.data)
         db.session.add(user)
         db.session.commit()
         flash("You have successfully registered! Please log in.", "success")
         return redirect(url_for("login"))
-    return render_template("register.html", form=form)
 
+    return render_template("register.html", form=form)
 
 
 # Login
@@ -83,18 +81,20 @@ def login():
         user = User.query.filter_by(username=form.username.data).first()
         if user and user.check_password(form.password.data):
             login_user(user)
-            flash(f"Welcome back, {user.username}!", "success")
-            return redirect(url_for("chatroom"))   # straight to chatroom
+            flash("You have successfully logged in!", "success")
+            return redirect(url_for("chat"))
         else:
-            flash("Invalid username or password", "danger")
+            flash("Invalid username or password.", "danger")
     return render_template("login.html", form=form)
+
 
 # Logout
 @app.route('/logout')
 @login_required
 def logout():
     logout_user()
-    return redirect(url_for('index'))
+    flash("You have been logged out.", "info")
+    return redirect(url_for('login'))
 
 
 # Profile
@@ -143,14 +143,14 @@ def create_room():
     form = RoomForm()
     if form.validate_on_submit():
         if Room.query.filter_by(name=form.name.data).first():
-            flash('Room exists', 'danger')
+            flash('Room already exists.', 'danger')
             return redirect(url_for('chat'))
         r = Room(name=form.name.data, private=form.private.data)
         db.session.add(r)
         db.session.commit()
-        flash('Room created', 'success')
+        flash('Room created successfully!', 'success')
         return redirect(url_for('room', room_name=form.name.data))
-    flash('Room creation failed', 'danger')
+    flash('Room creation failed.', 'danger')
     return redirect(url_for('chat'))
 
 
