@@ -9,4 +9,5 @@ python-dotenv
 werkzeug
 pillow
 better-profanity
+Flask-Bcrypt
 gunicorn
