@@ -1,4 +1,4 @@
-# app.py — fixed version (eventlet monkey-patch + index public + login_manager rename)
+# app.py
 
 import eventlet
 eventlet.monkey_patch()
@@ -8,10 +8,14 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template, redirect, url_for, flash, request, send_from_directory, abort
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user, UserMixin
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_socketio import SocketIO, join_room, leave_room, emit
+from flask_bcrypt import Bcrypt
 from werkzeug.utils import secure_filename
 from better_profanity import profanity
+
+from models import db, User, Room, Message
+from forms import RegisterForm, LoginForm, ProfileForm, RoomForm
 
 # --- Config ---
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -24,93 +28,67 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB
 
-db = SQLAlchemy(app)
+db.init_app(app)
 migrate = Migrate(app, db)
 
-# rename LoginManager instance to avoid clobbering by a view named `login`
-login_manager = LoginManager(app)
-login_manager.login_view = "login"  # when a login-required route is hit, redirect to this endpoint
+bcrypt = Bcrypt(app)
 
-socketio = SocketIO(app, cors_allowed_origins="*", manage_session=False)  # use eventlet worker for deployment
+# rename LoginManager instance
+login_manager = LoginManager(app)
+login_manager.login_view = "login"
+
+socketio = SocketIO(app, cors_allowed_origins="*", manage_session=False)
 
 profanity.load_censor_words()
 
-# --- Models ---
-class User(db.Model, UserMixin):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)  # can be nickname
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)
-    full_name = db.Column(db.String(120), nullable=False)
-    phone = db.Column(db.String(20))
-    gender = db.Column(db.String(10))  # Male / Female / Other
-    bio = db.Column(db.Text)
-    avatar = db.Column(db.String(300))
-    is_admin = db.Column(db.Boolean, default=False)
-    banned = db.Column(db.Boolean, default=False)
-    muted_until = db.Column(db.DateTime, nullable=True)
-
-class Room(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), unique=True, nullable=False)
-    private = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-class Message(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    text = db.Column(db.Text)
-    media = db.Column(db.String(300), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # --- Login loader ---
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+
 # --- Routes ---
 
-# Public landing page — NOT protected (no login required)
 @app.route('/')
 def index():
-    # show a simple landing page; if logged in, show quick link to chat
+    """Public landing page"""
     rooms = Room.query.order_by(Room.name).all() if current_user.is_authenticated else []
     return render_template('index.html', rooms=rooms)
+
 
 # Register
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    form = RegistrationForm()
+    form = RegisterForm()
     if form.validate_on_submit():
         hashed_password = bcrypt.generate_password_hash(form.password.data).decode("utf-8")
         user = User(
-            fullname=form.fullname.data,
-            email=form.email.data,
-            nickname=form.nickname.data,
-            phone=form.phone.data,
-            gender=form.gender.data,
+            username=form.username.data,
+            full_name=form.name.data,
             password=hashed_password
         )
         db.session.add(user)
         db.session.commit()
         flash("Your account has been created! Please log in.", "success")
-        return redirect(url_for("login"))  # 👈 redirect to login after registration
+        return redirect(url_for("login"))
     return render_template("register.html", form=form)
+
 
 # Login
 @app.route("/login", methods=["GET", "POST"])
 def login():
     form = LoginForm()
     if form.validate_on_submit():
-        user = User.query.filter_by(email=form.email.data).first()
+        user = User.query.filter_by(username=form.username.data).first()
         if user and bcrypt.check_password_hash(user.password, form.password.data):
             login_user(user)
             flash("Login successful!", "success")
-            return redirect(url_for("chat"))  # 👈 redirect to chatroom after login
+            return redirect(url_for("chat"))
         else:
-            flash("Login unsuccessful. Check email and password.", "danger")
+            flash("Login unsuccessful. Check username and password.", "danger")
     return render_template("login.html", form=form)
+
 
 # Logout
 @app.route('/logout')
@@ -119,14 +97,16 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
-# Protected profile route
+
+# Profile
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():
-    if request.method == 'POST':
-        current_user.name = request.form.get('name', current_user.name)
-        current_user.bio = request.form.get('bio', current_user.bio)
-        f = request.files.get('avatar')
+    form = ProfileForm()
+    if form.validate_on_submit():
+        current_user.name = form.name.data
+        current_user.bio = form.bio.data
+        f = form.avatar.data
         if f and f.filename:
             filename = secure_filename(f.filename)
             path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
@@ -135,15 +115,17 @@ def profile():
         db.session.commit()
         flash('Profile updated', 'success')
         return redirect(url_for('profile'))
-    return render_template('profile.html', user=current_user)
+    return render_template('profile.html', user=current_user, form=form)
 
-# Protected chat landing — requires login
+
+# Chat landing
 @app.route("/chat")
 @login_required
 def chat():
-    return render_template("chat.html", username=current_user.nickname)
+    return render_template("chat.html", username=current_user.username)
 
-# Room view — protected
+
+# Room view
 @app.route('/room/<room_name>')
 @login_required
 def room(room_name):
@@ -154,28 +136,29 @@ def room(room_name):
     messages = Message.query.filter_by(room_id=room.id).order_by(Message.created_at.asc()).limit(200).all()
     return render_template('chat.html', room=room, messages=messages)
 
+
 # Create room
 @app.route('/create_room', methods=['POST'])
 @login_required
 def create_room():
-    name = request.form.get('name', '').strip()
-    if not name:
-        flash('Room name required', 'danger')
-        return redirect(url_for('chat'))
-    if Room.query.filter_by(name=name).first():
-        flash('Room exists', 'danger')
-        return redirect(url_for('chat'))
-    r = Room(name=name, private=bool(request.form.get('private')))
-    db.session.add(r)
-    db.session.commit()
-    flash('Room created', 'success')
-    return redirect(url_for('room', room_name=name))
+    form = RoomForm()
+    if form.validate_on_submit():
+        if Room.query.filter_by(name=form.name.data).first():
+            flash('Room exists', 'danger')
+            return redirect(url_for('chat'))
+        r = Room(name=form.name.data, private=form.private.data)
+        db.session.add(r)
+        db.session.commit()
+        flash('Room created', 'success')
+        return redirect(url_for('room', room_name=form.name.data))
+    flash('Room creation failed', 'danger')
+    return redirect(url_for('chat'))
 
-# Serve uploaded files (profile pics / media)
+
+# Serve uploaded files
 @app.route('/uploads/<path:filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-
 
 
 # --- Socket.IO handlers ---
@@ -183,13 +166,15 @@ def uploaded_file(filename):
 def handle_join(data):
     room_name = data.get('room')
     join_room(room_name)
-    emit('system_message', {'msg': f'{current_user.name} joined {room_name}'}, room=room_name)
+    emit('system_message', {'msg': f'{current_user.username} joined {room_name}'}, room=room_name)
+
 
 @socketio.on('leave')
 def handle_leave(data):
     room_name = data.get('room')
     leave_room(room_name)
-    emit('system_message', {'msg': f'{current_user.name} left {room_name}'}, room=room_name)
+    emit('system_message', {'msg': f'{current_user.username} left {room_name}'}, room=room_name)
+
 
 @socketio.on('send_message')
 def handle_message(data):
@@ -200,16 +185,13 @@ def handle_message(data):
     if current_user.is_anonymous:
         emit('error', {'msg': 'Authentication required.'})
         return
-    # moderation checks
     if current_user.banned:
         emit('error', {'msg': 'You are banned.'})
         return
     if current_user.muted_until and current_user.muted_until > datetime.utcnow():
         emit('error', {'msg': 'You are muted.'})
         return
-    # censor
     text = profanity.censor(text)
-    # store message
     room = Room.query.filter_by(name=room_name).first()
     if not room:
         emit('error', {'msg': 'Room not found.'})
@@ -219,13 +201,14 @@ def handle_message(data):
     db.session.commit()
     payload = {
         'id': msg.id,
-        'user': current_user.name,
+        'user': current_user.username,
         'avatar': current_user.avatar,
         'text': text,
         'media': msg.media,
         'created_at': msg.created_at.isoformat()
     }
     emit('new_message', payload, room=room_name)
+
 
 # --- Admin actions ---
 @app.route('/admin/ban/<int:user_id>')
@@ -239,6 +222,7 @@ def admin_ban(user_id):
     flash('User banned', 'info')
     return redirect(url_for('chat'))
 
+
 @app.route('/admin/unban/<int:user_id>')
 @login_required
 def admin_unban(user_id):
@@ -249,6 +233,7 @@ def admin_unban(user_id):
     db.session.commit()
     flash('User unbanned', 'info')
     return redirect(url_for('chat'))
+
 
 @app.route('/admin/mute/<int:user_id>')
 @login_required
@@ -261,5 +246,7 @@ def admin_mute(user_id):
     flash('User muted for 30 minutes', 'info')
     return redirect(url_for('chat'))
 
+
+# --- Run ---
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=int(os.getenv('PORT', 5000)))
