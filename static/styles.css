@@ -1,0 +1,117 @@
+/* General Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #121212; /* Dark background */
+  color: #f5f5f5;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Navbar */
+.navbar {
+  background-color: #000;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.navbar a {
+  color: gold;
+  text-decoration: none;
+  margin-left: 15px;
+  font-weight: bold;
+}
+
+.navbar a:hover {
+  color: #f1c40f;
+}
+
+/* Main Container */
+.container {
+  flex: 1;
+  width: 90%;
+  max-width: 1000px;
+  margin: 2rem auto;
+  background: #1e1e1e;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0px 0px 20px rgba(255, 215, 0, 0.3);
+}
+
+/* Forms */
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+input, textarea, select {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #2c2c2c;
+  color: #fff;
+}
+
+button {
+  background-color: gold;
+  color: black;
+  font-weight: bold;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #f1c40f;
+}
+
+/* Chat Section */
+.chat-box {
+  border: 1px solid #444;
+  border-radius: 10px;
+  padding: 1rem;
+  background: #1a1a1a;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.message {
+  margin-bottom: 1rem;
+}
+
+.message strong {
+  color: gold;
+}
+
+.chat-input {
+  display: flex;
+  gap: 10px;
+  margin-top: 1rem;
+}
+
+.chat-input input {
+  flex: 1;
+}
+
+/* Profile Card */
+.profile-card {
+  text-align: center;
+}
+
+.profile-card img {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 3px solid gold;
+  margin-bottom: 1rem;
+}
