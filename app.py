@@ -82,37 +82,50 @@ def index():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
+        full_name = request.form['full_name'].strip()
+        email = request.form['email'].strip()
         username = request.form['username'].strip()
+        phone = request.form.get('phone')
+        gender = request.form.get('gender')
         password = request.form['password']
-        name = request.form.get('name', username)
-        if User.query.filter_by(username=username).first():
-            flash('Username taken', 'danger')
+
+        if User.query.filter((User.username == username) | (User.email == email)).first():
+            flash('Username or email already taken', 'danger')
             return redirect(url_for('register'))
-        # NOTE: Hash password in production (werkzeug.security.generate_password_hash)
-        u = User(username=username, password=password, name=name)
+
+        u = User(
+            username=username,
+            email=email,
+            password=password,  # ⚠️ hash later in production
+            full_name=full_name,
+            phone=phone,
+            gender=gender
+        )
         db.session.add(u)
         db.session.commit()
-        login_user(u)
-        flash('Welcome! Set up your profile.', 'success')
-        return redirect(url_for('profile'))
+
+        flash('Registration successful! Please log in.', 'success')
+        return redirect(url_for('login'))
+
     return render_template('register.html')
 
 # Login
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
+        username_or_email = request.form['username']
         pw = request.form['password']
-        user = User.query.filter_by(username=username).first()
-        # NOTE: Use check_password_hash in production
+        user = User.query.filter((User.username == username_or_email) | (User.email == username_or_email)).first()
+
         if not user or user.password != pw:
             flash('Invalid credentials', 'danger')
             return redirect(url_for('login'))
         if user.banned:
             flash('You are banned', 'danger')
             return redirect(url_for('login'))
+
         login_user(user)
-        return redirect(url_for('chat'))  # send to chat after login
+        return redirect(url_for('index'))
     return render_template('login.html')
 
 # Logout
