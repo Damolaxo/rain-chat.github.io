@@ -14,6 +14,8 @@
   {% block head %}{% endblock %}
 </head>
 <body>
+
+  <!-- Header -->
   <header class="site-header">
     <div class="header-inner">
       <a class="brand" href="{{ url_for('index') }}">
@@ -37,27 +39,30 @@
     </div>
   </header>
 
-  <main class="main-container">
-    <div class="flash-wrap">
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          {% for category, msg in messages %}
-            <div class="flash flash-{{ category }}">{{ msg }}</div>
-          {% endfor %}
-        {% endif %}
-      {% endwith %}
-    </div>
+  <!-- Flash messages -->
+  <div class="flash-wrap">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, msg in messages %}
+          <div class="flash flash-{{ category }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+  </div>
 
+  <!-- Main content -->
+  <main class="main-container">
     <div class="page-body">
       {% block content %}{% endblock %}
     </div>
   </main>
 
+  <!-- Footer -->
   <footer class="site-footer">
     &copy; {{ current_year or 2025 }} Robotic & Artificial Intelligence in Nigeria — RAIN Chat
   </footer>
 
-  <!-- Socket.io & scripts -->
+  <!-- Scripts -->
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
   {% block scripts %}{% endblock %}
 </body>
