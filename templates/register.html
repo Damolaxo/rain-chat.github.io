@@ -1,20 +1,37 @@
 {% extends "base.html" %}
+{% block title %}Register — RAIN Chat{% endblock %}
+
 {% block content %}
-<div class="form-container">
-    <h2>Create an Account</h2>
-    <form method="POST" action="{{ url_for('register') }}">
-        <input type="text" name="full_name" placeholder="Full Name" required><br>
-        <input type="email" name="email" placeholder="Email" required><br>
-        <input type="text" name="username" placeholder="Nickname" required><br>
-        <input type="text" name="phone" placeholder="Phone Number"><br>
-        <select name="gender" required>
-            <option value="">Select Gender</option>
-            <option>Male</option>
-            <option>Female</option>
-            <option>Other</option>
-        </select><br>
-        <input type="password" name="password" placeholder="Password" required><br>
-        <button type="submit">Register</button>
-    </form>
+<div class="form-center-card">
+  <h2 class="form-title">Create an account</h2>
+
+  <form method="POST" action="{{ url_for('register') }}" enctype="multipart/form-data" class="form-stack">
+    {{ form.hidden_tag() }}
+
+    <label>{{ form.name.label }}</label>
+    {{ form.name(class="input") }}
+
+    <label>{{ form.email.label }}</label>
+    {{ form.email(class="input") }}
+
+    <label>{{ form.username.label }}</label>
+    {{ form.username(class="input") }}
+
+    <label>{{ form.phone.label }}</label>
+    {{ form.phone(class="input") }}
+
+    <label>{{ form.gender.label }}</label>
+    {{ form.gender(class="input") }}
+
+    <label>{{ form.password.label }}</label>
+    {{ form.password(class="input") }}
+
+    <label>{{ form.confirm.label }}</label>
+    {{ form.confirm(class="input") }}
+
+    {{ form.submit(class="btn btn-gold full-width") }}
+  </form>
+
+  <p class="muted">Already registered? <a href="{{ url_for('login') }}">Log in</a></p>
 </div>
 {% endblock %}
