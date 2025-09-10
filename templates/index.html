@@ -1,21 +1,16 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="home-container">
-    <div class="logo">
-        <img src="{{ url_for('static', filename='rain_logo.png') }}" alt="RAIN Logo">
-    </div>
-    <h1 class="welcome-text">Welcome to Robotic & Artificial Intelligence in Nigeria (RAIN) Chat Room</h1>
-    <p class="sub-text">Connect with your colleagues in real-time.</p>
-
-    <div class="auth-buttons">
-        <a href="{{ url_for('login') }}" class="btn btn-login">Login</a>
-        <a href="{{ url_for('register') }}" class="btn btn-register">Register</a>
-    </div>
-
-    <p class="helper-text">
-        Don’t have an account? <a href="{{ url_for('register') }}">Register</a> | 
-        Already have one? <a href="{{ url_for('login') }}">Login</a>
-    </p>
+    <h1>Welcome to Rainigeria Chat</h1>
+    {% if current_user.is_authenticated %}
+        <p>Welcome back, {{ current_user.username }}! Join a chatroom below:</p>
+        <ul>
+            {% for room in rooms %}
+                <li><a href="{{ url_for('room', room_name=room.name) }}">{{ room.name }}</a></li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>Please <a href="{{ url_for('login') }}">login</a> or <a href="{{ url_for('register') }}">register</a> to start chatting.</p>
+    {% endif %}
 </div>
 {% endblock %}
-
