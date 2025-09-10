@@ -1,9 +1,18 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="profile-card">
-    <img src="{{ url_for('static', filename='uploads/' + user.profile_pic) }}" alt="Profile Picture">
-    <h2>{{ user.username }}</h2>
-    <p><strong>Email:</strong> {{ user.email }}</p>
-    <p><strong>Bio:</strong> {{ user.bio }}</p>
+<div class="profile-container">
+    <h2>Your Profile</h2>
+    <form method="POST" enctype="multipart/form-data">
+        <label>Name:</label>
+        <input type="text" name="name" value="{{ user.name }}"><br>
+        <label>Bio:</label>
+        <textarea name="bio">{{ user.bio }}</textarea><br>
+        <label>Avatar:</label>
+        {% if user.avatar %}
+            <img src="{{ url_for('uploaded_file', filename=user.avatar.split('/')[-1]) }}" alt="Avatar" width="100"><br>
+        {% endif %}
+        <input type="file" name="avatar"><br>
+        <button type="submit">Update Profile</button>
+    </form>
 </div>
 {% endblock %}
