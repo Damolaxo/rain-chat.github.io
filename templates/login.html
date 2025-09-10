@@ -1,12 +1,22 @@
 {% extends "base.html" %}
+{% block title %}Login — RAIN Chat{% endblock %}
+
 {% block content %}
-<div class="form-container">
-    <h2>Login</h2>
-    <form method="POST" action="{{ url_for('login') }}">
-        <input type="text" name="username" placeholder="Nickname" required><br>
-        <input type="password" name="password" placeholder="Password" required><br>
-        <button type="submit">Login</button>
-    </form>
-    <p>Don't have an account? <a href="{{ url_for('register') }}">Register here</a>.</p>
+<div class="form-center-card">
+  <h2 class="form-title">Login</h2>
+
+  <form method="POST" action="{{ url_for('login') }}" class="form-stack">
+    {{ form.hidden_tag() }}
+
+    <label>{{ form.username.label }}</label>
+    {{ form.username(class="input") }}
+
+    <label>{{ form.password.label }}</label>
+    {{ form.password(class="input") }}
+
+    {{ form.submit(class="btn btn-gold full-width") }}
+  </form>
+
+  <p class="muted">Don't have an account? <a href="{{ url_for('register') }}">Register here</a>.</p>
 </div>
 {% endblock %}
