@@ -1,0 +1,12 @@
+flask
+flask_sqlalchemy
+flask_migrate
+flask_login
+flask_wtf
+flask_socketio
+eventlet
+python-dotenv
+werkzeug
+pillow
+better-profanity
+gunicorn
