@@ -79,54 +79,38 @@ def index():
     return render_template('index.html', rooms=rooms)
 
 # Register
-@app.route('/register', methods=['GET', 'POST'])
+@app.route("/register", methods=["GET", "POST"])
 def register():
-    if request.method == 'POST':
-        full_name = request.form['full_name'].strip()
-        email = request.form['email'].strip()
-        username = request.form['username'].strip()
-        phone = request.form.get('phone')
-        gender = request.form.get('gender')
-        password = request.form['password']
-
-        if User.query.filter((User.username == username) | (User.email == email)).first():
-            flash('Username or email already taken', 'danger')
-            return redirect(url_for('register'))
-
-        u = User(
-            username=username,
-            email=email,
-            password=password,  # ⚠️ hash later in production
-            full_name=full_name,
-            phone=phone,
-            gender=gender
+    form = RegistrationForm()
+    if form.validate_on_submit():
+        hashed_password = bcrypt.generate_password_hash(form.password.data).decode("utf-8")
+        user = User(
+            fullname=form.fullname.data,
+            email=form.email.data,
+            nickname=form.nickname.data,
+            phone=form.phone.data,
+            gender=form.gender.data,
+            password=hashed_password
         )
-        db.session.add(u)
+        db.session.add(user)
         db.session.commit()
-
-        flash('Registration successful! Please log in.', 'success')
-        return redirect(url_for('login'))
-
-    return render_template('register.html')
+        flash("Your account has been created! Please log in.", "success")
+        return redirect(url_for("login"))  # 👈 redirect to login after registration
+    return render_template("register.html", form=form)
 
 # Login
-@app.route('/login', methods=['GET', 'POST'])
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == 'POST':
-        username_or_email = request.form['username']
-        pw = request.form['password']
-        user = User.query.filter((User.username == username_or_email) | (User.email == username_or_email)).first()
-
-        if not user or user.password != pw:
-            flash('Invalid credentials', 'danger')
-            return redirect(url_for('login'))
-        if user.banned:
-            flash('You are banned', 'danger')
-            return redirect(url_for('login'))
-
-        login_user(user)
-        return redirect(url_for('index'))
-    return render_template('login.html')
+    form = LoginForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(email=form.email.data).first()
+        if user and bcrypt.check_password_hash(user.password, form.password.data):
+            login_user(user)
+            flash("Login successful!", "success")
+            return redirect(url_for("chat"))  # 👈 redirect to chatroom after login
+        else:
+            flash("Login unsuccessful. Check email and password.", "danger")
+    return render_template("login.html", form=form)
 
 # Logout
 @app.route('/logout')
@@ -154,11 +138,10 @@ def profile():
     return render_template('profile.html', user=current_user)
 
 # Protected chat landing — requires login
-@app.route('/chat')
+@app.route("/chat")
 @login_required
 def chat():
-    rooms = Room.query.order_by(Room.name).all()
-    return render_template('chat_index.html', rooms=rooms)
+    return render_template("chat.html", username=current_user.nickname)
 
 # Room view — protected
 @app.route('/room/<room_name>')
@@ -192,6 +175,8 @@ def create_room():
 @app.route('/uploads/<path:filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+
 
 # --- Socket.IO handlers ---
 @socketio.on('join')
