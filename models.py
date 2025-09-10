@@ -8,17 +8,22 @@ db = SQLAlchemy()
 
 
 class User(db.Model, UserMixin):
-    __tablename__ = "user"
+    __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(200), nullable=False)  # store only hashed passwords
-    name = db.Column(db.String(120))
-    bio = db.Column(db.Text)
-    avatar = db.Column(db.String(300))  # file path or external URL
+    username = db.Column(db.String(80), unique=True, nullable=False)  # Nickname
+    email = db.Column(db.String(120), unique=True, nullable=False)    # Required for uniqueness
+    phone = db.Column(db.String(20), unique=True, nullable=True)      # Optional but unique if provided
+    gender = db.Column(db.String(10))                                 # Male/Female/Other
+    name = db.Column(db.String(120))                                  # Full Name
+    bio = db.Column(db.Text, nullable=True)
+    avatar = db.Column(db.String(300))                                # file path or external URL
+    
+    password_hash = db.Column(db.String(200), nullable=False)         # store only hashed passwords
     is_admin = db.Column(db.Boolean, default=False)
     banned = db.Column(db.Boolean, default=False)
     muted_until = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relationships
     messages = db.relationship("Message", backref="user", lazy=True)
@@ -35,7 +40,7 @@ class User(db.Model, UserMixin):
 
 
 class Room(db.Model):
-    __tablename__ = "room"
+    __tablename__ = "rooms"
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), unique=True, nullable=False)
@@ -50,11 +55,11 @@ class Room(db.Model):
 
 
 class Message(db.Model):
-    __tablename__ = "message"
+    __tablename__ = "messages"
 
     id = db.Column(db.Integer, primary_key=True)
-    room_id = db.Column(db.Integer, db.ForeignKey("room.id"), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    room_id = db.Column(db.Integer, db.ForeignKey("rooms.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     text = db.Column(db.Text, nullable=True)
     media = db.Column(db.String(300), nullable=True)  # file path or external URL
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
