@@ -62,17 +62,17 @@ def index():
 def register():
     form = RegisterForm()
     if form.validate_on_submit():
-        hashed_password = bcrypt.generate_password_hash(form.password.data).decode("utf-8")
         user = User(
             username=form.username.data,
-            full_name=form.name.data,
-            password=hashed_password
+            name=form.name.data
         )
+        user.set_password(form.password.data)
         db.session.add(user)
         db.session.commit()
-        flash("Your account has been created! Please log in.", "success")
+        flash("You have successfully registered! Please log in.", "success")
         return redirect(url_for("login"))
     return render_template("register.html", form=form)
+
 
 
 # Login
@@ -81,14 +81,13 @@ def login():
     form = LoginForm()
     if form.validate_on_submit():
         user = User.query.filter_by(username=form.username.data).first()
-        if user and bcrypt.check_password_hash(user.password, form.password.data):
+        if user and user.check_password(form.password.data):
             login_user(user)
-            flash("Login successful!", "success")
-            return redirect(url_for("chat"))
+            flash(f"Welcome back, {user.username}!", "success")
+            return redirect(url_for("chatroom"))   # straight to chatroom
         else:
-            flash("Login unsuccessful. Check username and password.", "danger")
+            flash("Invalid username or password", "danger")
     return render_template("login.html", form=form)
-
 
 # Logout
 @app.route('/logout')
