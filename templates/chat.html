@@ -1,51 +1,83 @@
 {% extends "base.html" %}
+{% block title %}Chat — RAIN Chat{% endblock %}
+
 {% block content %}
-<div class="chat-container">
-    <h2>Welcome to the Chatroom, {{ username }}!</h2>
-    <div id="chat-box">
-        {% if messages %}
-            {% for msg in messages %}
-                <p><strong>{{ msg.user.username }}:</strong> {{ msg.text }}</p>
-            {% endfor %}
-        {% endif %}
-    </div>
-    <form id="chat-form">
-        <input type="text" id="chat-input" placeholder="Type your message..." autocomplete="off">
-        <button type="submit">Send</button>
+<div class="chat-wrap">
+  <aside class="rooms-panel">
+    <h3>Rooms</h3>
+    <ul class="room-list">
+      {% for r in Room.query.order_by(Room.name).all() %}
+        <li><a href="{{ url_for('room', room_name=r.name) }}">{{ r.name }}</a></li>
+      {% endfor %}
+    </ul>
+
+    <form method="POST" action="{{ url_for('create_room') }}" class="create-room">
+      {{ render_field(room_form.name, class_="input", placeholder="New room name") }}
+      {{ render_field(room_form.private) }} Private
+      <button class="btn btn-outline">Create</button>
     </form>
+  </aside>
+
+  <section class="chat-panel">
+    <header class="chat-header">
+      <h2>{{ room.name if room else 'General' }}</h2>
+    </header>
+
+    <div id="chat-box" class="chat-box">
+      {% if messages %}
+        {% for m in messages %}
+          <div class="message">
+            <div class="msg-meta">
+              <strong>{{ m.user.name or m.user.username }}</strong>
+              <span class="ts">{{ m.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+            </div>
+            <div class="msg-text">{{ m.text }}</div>
+          </div>
+        {% endfor %}
+      {% endif %}
+    </div>
+
+    <form id="chat-form" class="chat-input" onsubmit="return false;">
+      <input id="msg-input" placeholder="Type a message..." autocomplete="off" />
+      <button id="send-btn" class="btn btn-gold">Send</button>
+    </form>
+  </section>
 </div>
+{% endblock %}
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
+{% block scripts %}
 <script>
-    const socket = io();
-    const roomName = "{{ room.name if room else 'general' }}";
-    socket.emit('join', { room: roomName });
+  const socket = io();
+  const roomName = "{{ room.name if room else 'general' }}";
 
-    const chatBox = document.getElementById("chat-box");
-    const chatForm = document.getElementById("chat-form");
-    const chatInput = document.getElementById("chat-input");
+  socket.emit('join', { room: roomName });
 
-    chatForm.addEventListener("submit", function(e) {
-        e.preventDefault();
-        const msg = chatInput.value;
-        if (msg.trim() !== "") {
-            socket.emit("send_message", { text: msg, room: roomName });
-            chatInput.value = "";
-        }
-    });
+  const chatBox = document.getElementById('chat-box');
+  const msgInput = document.getElementById('msg-input');
+  const sendBtn = document.getElementById('send-btn');
 
-    socket.on("new_message", function(data) {
-        const p = document.createElement("p");
-        p.innerHTML = `<strong>${data.user}:</strong> ${data.text}`;
-        chatBox.appendChild(p);
-        chatBox.scrollTop = chatBox.scrollHeight;
-    });
+  sendBtn.addEventListener('click', () => {
+    const text = msgInput.value.trim();
+    if (!text) return;
+    socket.emit('send_message', { text, room: roomName });
+    msgInput.value = '';
+  });
 
-    socket.on("system_message", function(data) {
-        const p = document.createElement("p");
-        p.innerHTML = `<em>${data.msg}</em>`;
-        chatBox.appendChild(p);
-        chatBox.scrollTop = chatBox.scrollHeight;
-    });
+  socket.on('new_message', (data) => {
+    const d = document.createElement('div');
+    d.className = 'message';
+    d.innerHTML = `<div class="msg-meta"><strong>${data.user}</strong><span class="ts">${new Date(data.created_at).toLocaleString()}</span></div>
+                   <div class="msg-text">${data.text}</div>`;
+    chatBox.appendChild(d);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  });
+
+  socket.on('system_message', (d)=> {
+    const el = document.createElement('div');
+    el.className = 'system';
+    el.textContent = d.msg;
+    chatBox.appendChild(el);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  });
 </script>
 {% endblock %}
