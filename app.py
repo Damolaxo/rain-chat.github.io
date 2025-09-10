@@ -38,11 +38,14 @@ profanity.load_censor_words()
 # --- Models ---
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)  # HASH IN PRODUCTION
-    name = db.Column(db.String(120))
+    username = db.Column(db.String(80), unique=True, nullable=False)  # can be nickname
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password = db.Column(db.String(200), nullable=False)
+    full_name = db.Column(db.String(120), nullable=False)
+    phone = db.Column(db.String(20))
+    gender = db.Column(db.String(10))  # Male / Female / Other
     bio = db.Column(db.Text)
-    avatar = db.Column(db.String(300))  # filename/url (e.g. uploads/xyz.png)
+    avatar = db.Column(db.String(300))
     is_admin = db.Column(db.Boolean, default=False)
     banned = db.Column(db.Boolean, default=False)
     muted_until = db.Column(db.DateTime, nullable=True)
