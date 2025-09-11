@@ -2,6 +2,9 @@
 import eventlet
 eventlet.monkey_patch()
 
+from models import db, User
+from forms import RegistrationForm, LoginForm
+
 import os
 from datetime import datetime, timedelta
 from flask import Flask, render_template, redirect, url_for, flash, request, send_from_directory, abort
@@ -10,10 +13,6 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from flask_socketio import SocketIO, join_room, leave_room, emit
 from werkzeug.utils import secure_filename
 from better_profanity import profanity
-
-# local modules - adjust names if your files differ
-from models import db, User, Room, Message
-from forms import RegistrationForm, LoginForm, ProfileForm, RoomForm
 
 # --- Config ---
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
