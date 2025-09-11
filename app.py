@@ -12,7 +12,7 @@ from werkzeug.utils import secure_filename
 from better_profanity import profanity
 
 from models import db, User, Room, Message
-from forms import RegisterForm, LoginForm, ProfileForm, RoomForm
+from forms import RegistrationForm, LoginForm, ProfileForm, RoomForm
 
 # --- Config ---
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
