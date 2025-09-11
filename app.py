@@ -246,6 +246,11 @@ def admin_mute(user_id):
     flash('User muted for 30 minutes 🔇', 'info')
     return redirect(url_for('chat'))
 
+from datetime import datetime
+
+@app.context_processor
+def inject_current_year():
+    return {'current_year': datetime.utcnow().year}
 
 # --- Run ---
 if __name__ == '__main__':
