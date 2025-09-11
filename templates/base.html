@@ -14,7 +14,15 @@
   {% block head %}{% endblock %}
 </head>
 <body>
-
+  <div class="flash-wrap">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="flash flash-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+</div>
   <!-- Header -->
   <header class="site-header">
     <div class="header-inner">
