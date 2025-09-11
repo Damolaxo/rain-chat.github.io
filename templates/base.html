@@ -1,69 +1,17 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{% block title %}RAIN Chat{% endblock %}</title>
-
-  <!-- Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
-
-  <!-- Main styles -->
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-
-  {% block head %}{% endblock %}
-</head>
-<body>
-
-  <!-- Header -->
-  <header class="site-header">
-    <div class="header-inner">
-      <a class="brand" href="{{ url_for('index') }}">
-        <img src="{{ url_for('static', filename='uploads/rain_logo.png') }}" alt="RAIN Logo" class="brand-logo">
-        <span class="brand-text">RAIN Chat</span>
-      </a>
-
-      <nav class="top-nav">
-        <ul>
-          <li><a href="{{ url_for('index') }}">Home</a></li>
-          {% if current_user.is_authenticated %}
-            <li><a href="{{ url_for('chat') }}">Chat</a></li>
-            <li><a href="{{ url_for('profile') }}">Profile</a></li>
-            <li><a href="{{ url_for('logout') }}">Logout</a></li>
-          {% else %}
-            <li><a href="{{ url_for('login') }}">Login</a></li>
-            <li><a href="{{ url_for('register') }}">Register</a></li>
-          {% endif %}
-        </ul>
-      </nav>
+{% extends "base.html" %}
+{% block content %}
+<div class="form-container">
+  <h2>Login</h2>
+  <form method="POST" action="{{ url_for('login') }}">
+    {{ form.hidden_tag() }}
+    <div class="form-group">
+      {{ form.username.label }} {{ form.username(class="input-field") }}
     </div>
-  </header>
-
-  <!-- Flash messages -->
-  <div class="flash-messages">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="flash {{ category }}">{{ message }}</div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
-  </div>
-
-  <!-- Main content -->
-  <main class="main-container">
-    <div class="page-body">
-      {% block content %}{% endblock %}
+    <div class="form-group">
+      {{ form.password.label }} {{ form.password(class="input-field") }}
     </div>
-  </main>
-
-  <!-- Footer -->
-  <footer class="site-footer">
-    &copy; {{ current_year or 2025 }} Robotic & Artificial Intelligence in Nigeria — RAIN Chat
-  </footer>
-
-  <!-- Scripts -->
-  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-  {% block scripts %}{% endblock %}
-</body>
-</html>
+    <button type="submit" class="btn">Login</button>
+  </form>
+  <p class="switch-link">Don’t have an account? <a href="{{ url_for('register') }}">Register here</a></p>
+</div>
+{% endblock %}
