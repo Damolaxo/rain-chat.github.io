@@ -1,271 +1,221 @@
-# app.py
-import eventlet
-eventlet.monkey_patch()
-
-from models import db, User
-from forms import RegistrationForm, LoginForm, ProfileForm, RoomForm
-
 import os
 from datetime import datetime, timedelta
-from flask import Flask, render_template, redirect, url_for, flash, request, send_from_directory, abort
+
+from flask import Flask, render_template, redirect, url_for, flash, request, jsonify, send_from_directory
+from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from flask_socketio import SocketIO, join_room, leave_room, emit
 from werkzeug.utils import secure_filename
-from better_profanity import profanity
+from flask_socketio import SocketIO, join_room, leave_room, emit, send
+import bleach
 
-# --- Config ---
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
+UPLOAD_FOLDER = 'static/uploads'
+ALLOWED_EXT = {'png','jpg','jpeg','gif','mp4','webm','mov'}
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key-change-me")
-app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///" + os.path.join(BASE_DIR, "chat.db"))
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY','dev-secret')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL','sqlite:///rainchat.db')
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB uploads
 
-# --- Extensions ---
-db.init_app(app)
+db = SQLAlchemy(app)
 migrate = Migrate(app, db)
-
 login_manager = LoginManager(app)
-login_manager.login_view = "login"
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
-socketio = SocketIO(app, cors_allowed_origins="*", manage_session=False)
+from models import User, Message, Room, Reaction, PinnedMessage, Block, Ban, Mute
+from forms import RegisterForm, LoginForm, ProfileForm
 
-profanity.load_censor_words()
+# --- utility functions ---
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.',1)[1].lower() in ALLOWED_EXT
 
-# --- Helpers ---
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
+def sanitize(text):
+    # basic sanitize using bleach - extend for more rules
+    return bleach.clean(text, strip=True)
 
-@app.context_processor
-def inject_current_year():
-    return {"current_year": datetime.utcnow().year}
-
-
-# --- Routes ---
-
-@app.route("/")
+# --- routes ---
+@app.route('/')
 def index():
-    """Public landing page. If logged in, show rooms list."""
-    rooms = Room.query.order_by(Room.name).all() if current_user.is_authenticated else []
-    return render_template("index.html", rooms=rooms)
+    return render_template('index.html')
 
-
-# Register (uses WTForms RegistrationForm)
-from flask import flash, redirect, url_for, render_template
-from flask_login import login_user, logout_user, login_required
-
-@app.route('/register', methods=['GET', 'POST'])
+@app.route('/register', methods=['GET','POST'])
 def register():
-    form = RegistrationForm()
+    form = RegisterForm()
     if form.validate_on_submit():
-        # check if username/email already exists
-        existing_user = User.query.filter(
-            (User.username == form.username.data) | (User.email == form.email.data)
-        ).first()
-        if existing_user:
-            flash("You have already registered, go to login.", "error")
-            return redirect(url_for("login"))
-
-        # create user
-        new_user = User(
-            username=form.username.data,
-            name=form.name.data,
-            email=form.email.data
+        # check duplicates by email or phone
+        if User.query.filter((User.email==form.email.data)|(User.phone==form.phone.data)).first():
+            flash("You have registered before. Use login or recover password.", "warning")
+            return redirect(url_for('login'))
+        u = User(
+            name = form.name.data,
+            email = form.email.data.lower(),
+            nickname = form.nickname.data,
+            phone = form.phone.data,
         )
-        new_user.set_password(form.password.data)
-        db.session.add(new_user)
+        u.set_password(form.password.data)
+        db.session.add(u)
         db.session.commit()
+        flash("Successfully registered. You can now login.", "success")
+        return redirect(url_for('login'))
+    return render_template('register.html', form=form)
 
-        flash("You have successfully registered! Please login.", "success")
-        return redirect(url_for("login"))
-
-    return render_template("register.html", form=form)
-
-
-# Login (uses WTForms LoginForm)
-@app.route('/login', methods=['GET', 'POST'])
+@app.route('/login', methods=['GET','POST'])
 def login():
     form = LoginForm()
     if form.validate_on_submit():
-        user = User.query.filter_by(username=form.username.data).first()
-        if user and user.check_password(form.password.data):
+        user = User.query.filter_by(email=form.email.data.lower()).first()
+        if not user:
+            flash("No account found with that email.", "danger")
+            return redirect(url_for('register'))
+        if user.check_password(form.password.data):
+            # check ban
+            ban = Ban.query.filter_by(user_id=user.id).first()
+            if ban:
+                flash("Your account is banned.", "danger")
+                return redirect(url_for('index'))
             login_user(user)
-            flash("You have successfully logged in!", "success")
-            return redirect(url_for("chat"))  # redirect to chat/dashboard
+            flash("Successfully logged in.", "success")
+            return redirect(url_for('chat'))
         else:
-            flash("Invalid username or password.", "error")
-    return render_template("login.html", form=form)
+            flash("Invalid credentials.", "danger")
+    return render_template('login.html', form=form)
 
-
-# Logout
-@app.route("/logout")
+@app.route('/logout')
 @login_required
 def logout():
     logout_user()
-    flash("You have been logged out.", "info")
-    return redirect(url_for("login"))
+    flash("Logged out.", "info")
+    return redirect(url_for('index'))
 
-
-# Profile
-@app.route("/profile", methods=["GET", "POST"])
+@app.route('/profile', methods=['GET','POST'])
 @login_required
 def profile():
     form = ProfileForm(obj=current_user)
     if form.validate_on_submit():
         current_user.name = form.name.data
-        current_user.bio = form.bio.data
-        # handle avatar upload
-        f = form.avatar.data
-        if f and getattr(f, "filename", None):
-            filename = secure_filename(f.filename)
-            path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        current_user.nickname = form.nickname.data
+        current_user.bio = sanitize(form.bio.data)
+        # handle avatar
+        f = request.files.get('avatar')
+        if f and allowed_file(f.filename):
+            filename = secure_filename(f"{current_user.id}-{datetime.utcnow().timestamp()}-{f.filename}")
+            path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             f.save(path)
-            current_user.avatar = "uploads/" + filename
+            current_user.avatar = filename
         db.session.commit()
-        flash("Profile updated ✅", "success")
-        return redirect(url_for("profile"))
-    return render_template("profile.html", user=current_user, form=form)
+        flash("Profile updated.", "success")
+        return redirect(url_for('profile'))
+    return render_template('profile.html', form=form)
 
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
-# Chat landing
-@app.route("/chat")
+@app.route('/chat')
 @login_required
 def chat():
-    return render_template("chat.html", username=current_user.username)
+    rooms = Room.query.filter_by(is_private=False).all()
+    return render_template('chat.html', rooms=rooms, user=current_user)
 
-
-# Room view
-@app.route("/room/<room_name>")
+# search messages example
+@app.route('/search')
 @login_required
-def room(room_name):
-    room = Room.query.filter_by(name=room_name).first_or_404()
-    if room.private and not current_user.is_admin:
-        flash("Private room - access denied 🚫", "danger")
-        return redirect(url_for("chat"))
-    messages = Message.query.filter_by(room_id=room.id).order_by(Message.created_at.asc()).limit(200).all()
-    return render_template("chat.html", room=room, messages=messages)
+def search():
+    q = request.args.get('q','').strip()
+    results = []
+    if q:
+        results = Message.query.filter(Message.content.contains(q)).order_by(Message.timestamp.desc()).limit(100).all()
+    return render_template('search.html', results=results, q=q)
 
-
-# Create room
-@app.route("/create_room", methods=["POST"])
+# Admin actions: pin message, mute/ban etc (simple POST endpoints)
+@app.route('/admin/pin', methods=['POST'])
 @login_required
-def create_room():
-    form = RoomForm()
-    if form.validate_on_submit():
-        if Room.query.filter_by(name=form.name.data).first():
-            flash("⚠️ Room already exists.", "danger")
-            return redirect(url_for("chat"))
-        r = Room(name=form.name.data.strip(), private=form.private.data)
-        db.session.add(r)
-        db.session.commit()
-        flash("✅ Room created successfully!", "success")
-        return redirect(url_for("room", room_name=r.name))
-    flash("❌ Room creation failed.", "danger")
-    return redirect(url_for("chat"))
+def pin_message():
+    if not current_user.is_admin:
+        return jsonify({'error':'forbidden'}), 403
+    mid = request.json.get('message_id')
+    msg = Message.query.get(mid)
+    if not msg:
+        return jsonify({'error':'not found'}), 404
+    pm = PinnedMessage(message_id=msg.id, room_id=msg.room_id, pinned_by=current_user.id)
+    db.session.add(pm); db.session.commit()
+    return jsonify({'ok':True})
 
-
-# Serve uploaded files (profile pics / media)
-@app.route("/uploads/<path:filename>")
-def uploaded_file(filename):
-    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
-
-
-# --- Socket.IO handlers ---
-@socketio.on("join")
-def handle_join(data):
-    room_name = data.get("room")
-    if room_name:
-        join_room(room_name)
-        emit("system_message", {"msg": f"{current_user.username} joined {room_name}"}, room=room_name)
-
-
-@socketio.on("leave")
-def handle_leave(data):
-    room_name = data.get("room")
-    if room_name:
-        leave_room(room_name)
-        emit("system_message", {"msg": f"{current_user.username} left {room_name}"}, room=room_name)
-
-
-@socketio.on("send_message")
-def handle_message(data):
-    text = (data.get("text") or "").strip()
-    room_name = data.get("room")
-    if not text and not data.get("media"):
-        return
-    if current_user.is_anonymous:
-        emit("error", {"msg": "Authentication required."})
-        return
-    if current_user.banned:
-        emit("error", {"msg": "You are banned."})
-        return
-    if current_user.muted_until and current_user.muted_until > datetime.utcnow():
-        emit("error", {"msg": "You are muted."})
-        return
-
-    text = profanity.censor(text)
-    room = Room.query.filter_by(name=room_name).first()
+# --- SocketIO events ---
+@socketio.on('join')
+def on_join(data):
+    room_id = data.get('room')
+    room = Room.query.get(room_id)
     if not room:
-        emit("error", {"msg": "Room not found."})
+        emit('error', {'error':'room not found'})
+        return
+    # check if user is banned or muted in room
+    ban = Ban.query.filter_by(user_id=current_user.id, room_id=room.id).first()
+    if ban:
+        emit('error', {'error':'you are banned from this room'})
+        return
+    join_room(room.room_name)
+    emit('status', {'msg': f"{current_user.nickname} has joined."}, room=room.room_name)
+
+@socketio.on('leave')
+def on_leave(data):
+    room_name = data.get('room_name')
+    leave_room(room_name)
+    emit('status', {'msg': f"{current_user.nickname} has left."}, room=room_name)
+
+@socketio.on('message')
+def on_message(data):
+    # data: {room_id, content, reply_to (optional), to_user (optional for private)}
+    content = (data.get('content') or '').strip()
+    if not content:
+        return
+    content = sanitize(content)
+    # profanity filter
+    from utils import contains_profanity
+    if contains_profanity(content):
+        emit('error', {'error':'message blocked by profanity filter'})
         return
 
-    msg = Message(room_id=room.id, user_id=current_user.id, text=text, media=data.get("media"))
-    db.session.add(msg)
-    db.session.commit()
+    room_id = data.get('room_id')
+    reply_to = data.get('reply_to')
+    to_user = data.get('to_user')  # for private messages
+
+    # check mute
+    mute = Mute.query.filter_by(user_id=current_user.id, room_id=room_id).first()
+    if mute and mute.expires_at and mute.expires_at > datetime.utcnow():
+        emit('error', {'error':'you are muted'})
+        return
+
+    msg = Message(
+        user_id=current_user.id,
+        room_id=room_id,
+        content=content,
+        timestamp=datetime.utcnow(),
+        reply_to=reply_to,
+        is_private = bool(to_user)
+    )
+    db.session.add(msg); db.session.commit()
 
     payload = {
-        "id": msg.id,
-        "user": current_user.username,
-        "avatar": current_user.avatar,
-        "text": text,
-        "media": msg.media,
-        "created_at": msg.created_at.isoformat(),
+        'id': msg.id,
+        'user': {'id': current_user.id, 'nickname': current_user.nickname, 'avatar': current_user.avatar},
+        'content': content,
+        'timestamp': msg.timestamp.isoformat(),
+        'reply_to': reply_to,
     }
-    emit("new_message", payload, room=room_name)
+    if to_user:
+        # private: emit to both users' personal rooms
+        personal_room = f"user_{to_user}"
+        my_room = f"user_{current_user.id}"
+        emit('private_message', payload, room=personal_room)
+        emit('private_message', payload, room=my_room)
+    else:
+        r = Room.query.get(room_id)
+        emit('message', payload, room=r.room_name)
 
+# additional events: reactions, typing, edit, delete (left as TODO)
 
-# --- Admin actions ---
-@app.route("/admin/ban/<int:user_id>")
-@login_required
-def admin_ban(user_id):
-    if not current_user.is_admin:
-        abort(403)
-    u = User.query.get_or_404(user_id)
-    u.banned = True
-    db.session.commit()
-    flash("User banned 🚫", "info")
-    return redirect(url_for("chat"))
-
-
-@app.route("/admin/unban/<int:user_id>")
-@login_required
-def admin_unban(user_id):
-    if not current_user.is_admin:
-        abort(403)
-    u = User.query.get_or_404(user_id)
-    u.banned = False
-    db.session.commit()
-    flash("User unbanned ✅", "info")
-    return redirect(url_for("chat"))
-
-
-@app.route("/admin/mute/<int:user_id>")
-@login_required
-def admin_mute(user_id):
-    if not current_user.is_admin:
-        abort(403)
-    u = User.query.get_or_404(user_id)
-    u.muted_until = datetime.utcnow() + timedelta(minutes=30)
-    db.session.commit()
-    flash("User muted for 30 minutes 🔇", "info")
-    return redirect(url_for("chat"))
-
-
-# --- Run ---
-if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+if __name__ == '__main__':
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    socketio.run(app, host='0.0.0.0', port=int(os.environ.get('PORT',5000)))
