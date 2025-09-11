@@ -55,22 +55,23 @@ def index():
 def register():
     form = RegistrationForm()
     if form.validate_on_submit():
-        # Check if user exists
-        existing_user = User.query.filter_by(username=form.username.data).first()
-        if existing_user:
-            flash("You have already registered. Please log in.", "danger")
-            return redirect(url_for("login"))
-        
-        # Create new user
-        hashed_password = generate_password_hash(form.password.data)
-        new_user = User(username=form.username.data, password=hashed_password)
-        db.session.add(new_user)
-        db.session.commit()
+        username = form.username.data
 
-        flash("Registration successful! Please log in.", "success")
+        # Check if already registered (example using CSV)
+        with open("users.csv", "r") as f:
+            if username in f.read():
+                flash("User already registered! Please log in.", "error")
+                return redirect(url_for("login"))
+
+        # Save user to CSV (append mode)
+        with open("users.csv", "a") as f:
+            f.write(f"{username},{form.password.data},{form.name.data}\n")
+
+        flash("Registered successfully! Please log in.", "success")
         return redirect(url_for("login"))
-    
+
     return render_template("register.html", form=form)
+
 
 # --- Login ---
 @app.route("/login", methods=["GET", "POST"])
