@@ -3,7 +3,7 @@ import eventlet
 eventlet.monkey_patch()
 
 from models import db, User
-from forms import RegistrationForm, LoginForm
+from forms import RegistrationForm, LoginForm, ProfileForm, RoomForm
 
 import os
 from datetime import datetime, timedelta
@@ -58,8 +58,6 @@ def index():
 # Register (uses WTForms RegistrationForm)
 from flask import flash, redirect, url_for, render_template
 from flask_login import login_user, logout_user, login_required
-from .models import db, User
-from .forms import RegistrationForm, LoginForm
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
