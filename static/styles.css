@@ -144,3 +144,19 @@ body {
   .rooms-panel { width: 100% }
   .auth-row { flex-direction: column }
 }
+
+.flash {
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 5px;
+  text-align: center;
+  font-weight: bold;
+}
+.flash.success {
+  background-color: #28a745;
+  color: white;
+}
+.flash.error {
+  background-color: #dc3545;
+  color: white;
+}
