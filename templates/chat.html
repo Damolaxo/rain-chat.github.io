@@ -1,83 +1,56 @@
 {% extends "base.html" %}
-{% block title %}Chat — RAIN Chat{% endblock %}
-
 {% block content %}
-<div class="chat-wrap">
-  <aside class="rooms-panel">
+<div class="chat-layout">
+  <aside class="rooms">
     <h3>Rooms</h3>
-    <ul class="room-list">
-      {% for r in Room.query.order_by(Room.name).all() %}
-        <li><a href="{{ url_for('room', room_name=r.name) }}">{{ r.name }}</a></li>
+    <ul id="rooms">
+      {% for r in rooms %}
+        <li data-room="{{ r.id }}">{{ r.title or r.room_name }}</li>
       {% endfor %}
     </ul>
-
-    <form method="POST" action="{{ url_for('create_room') }}" class="create-room">
-      {{ render_field(room_form.name, class_="input", placeholder="New room name") }}
-      {{ render_field(room_form.private) }} Private
-      <button class="btn btn-outline">Create</button>
-    </form>
   </aside>
 
-  <section class="chat-panel">
-    <header class="chat-header">
-      <h2>{{ room.name if room else 'General' }}</h2>
-    </header>
-
-    <div id="chat-box" class="chat-box">
-      {% if messages %}
-        {% for m in messages %}
-          <div class="message">
-            <div class="msg-meta">
-              <strong>{{ m.user.name or m.user.username }}</strong>
-              <span class="ts">{{ m.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
-            </div>
-            <div class="msg-text">{{ m.text }}</div>
-          </div>
-        {% endfor %}
-      {% endif %}
-    </div>
-
-    <form id="chat-form" class="chat-input" onsubmit="return false;">
-      <input id="msg-input" placeholder="Type a message..." autocomplete="off" />
-      <button id="send-btn" class="btn btn-gold">Send</button>
+  <section class="conversation">
+    <div id="messages" class="messages"></div>
+    <form id="msgForm">
+      <input id="msgInput" autocomplete="off" placeholder="Write a message...">
+      <button>Send</button>
     </form>
   </section>
-</div>
-{% endblock %}
 
-{% block scripts %}
+  <aside class="members">
+    <h3>{{ current_user.nickname }}</h3>
+    <img src="{{ url_for('uploaded_file', filename=current_user.avatar) }}" alt="avatar" class="avatar-small">
+    <button onclick="toggleTheme()">Toggle Light</button>
+  </aside>
+</div>
+
 <script>
   const socket = io();
-  const roomName = "{{ room.name if room else 'general' }}";
+  let currentRoom = null;
 
-  socket.emit('join', { room: roomName });
-
-  const chatBox = document.getElementById('chat-box');
-  const msgInput = document.getElementById('msg-input');
-  const sendBtn = document.getElementById('send-btn');
-
-  sendBtn.addEventListener('click', () => {
-    const text = msgInput.value.trim();
-    if (!text) return;
-    socket.emit('send_message', { text, room: roomName });
-    msgInput.value = '';
+  document.querySelectorAll('#rooms li').forEach(item=>{
+    item.onclick = ()=> {
+      currentRoom = item.dataset.room;
+      socket.emit('join', {room: currentRoom});
+      document.getElementById('messages').innerHTML = '';
+      // fetch last 50 messages via REST if desired (not implemented here)
+    };
   });
 
-  socket.on('new_message', (data) => {
-    const d = document.createElement('div');
-    d.className = 'message';
-    d.innerHTML = `<div class="msg-meta"><strong>${data.user}</strong><span class="ts">${new Date(data.created_at).toLocaleString()}</span></div>
-                   <div class="msg-text">${data.text}</div>`;
-    chatBox.appendChild(d);
-    chatBox.scrollTop = chatBox.scrollHeight;
-  });
-
-  socket.on('system_message', (d)=> {
+  socket.on('message', (msg)=>{
     const el = document.createElement('div');
-    el.className = 'system';
-    el.textContent = d.msg;
-    chatBox.appendChild(el);
-    chatBox.scrollTop = chatBox.scrollHeight;
+    el.classList.add('msg');
+    el.innerHTML = `<strong>${msg.user.nickname}</strong>: ${msg.content}`;
+    document.getElementById('messages').appendChild(el);
   });
+
+  document.getElementById('msgForm').onsubmit = (e)=> {
+    e.preventDefault();
+    const txt = document.getElementById('msgInput').value;
+    if(!currentRoom) return alert('Choose a room first');
+    socket.emit('message', {room_id: currentRoom, content: txt});
+    document.getElementById('msgInput').value = '';
+  };
 </script>
 {% endblock %}
