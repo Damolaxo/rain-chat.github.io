@@ -53,22 +53,24 @@ def index():
 # --- Register ---
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    form = RegisterForm()
+    form = RegistrationForm()
     if form.validate_on_submit():
+        # Check if user exists
         existing_user = User.query.filter_by(username=form.username.data).first()
         if existing_user:
-            flash("⚠️ This username is already registered. Please log in.", "danger")
+            flash("You have already registered. Please log in.", "danger")
             return redirect(url_for("login"))
-
-        user = User(username=form.username.data, name=form.name.data)
-        user.set_password(form.password.data)
-        db.session.add(user)
+        
+        # Create new user
+        hashed_password = generate_password_hash(form.password.data)
+        new_user = User(username=form.username.data, password=hashed_password)
+        db.session.add(new_user)
         db.session.commit()
 
-        flash("✅ You have successfully registered! Please log in.", "success")
+        flash("Registration successful! Please log in.", "success")
         return redirect(url_for("login"))
+    
     return render_template("register.html", form=form)
-
 
 # --- Login ---
 @app.route("/login", methods=["GET", "POST"])
@@ -76,14 +78,14 @@ def login():
     form = LoginForm()
     if form.validate_on_submit():
         user = User.query.filter_by(username=form.username.data).first()
-        if user and user.check_password(form.password.data):
+        if user and check_password_hash(user.password, form.password.data):
             login_user(user)
-            flash("✅ Logged in successfully!", "success")
-            return redirect(url_for("chat"))
+            flash("You have successfully logged in!", "success")
+            return redirect(url_for("chat"))  # or wherever your main page is
         else:
-            flash("❌ Invalid username or password. Don’t have an account? Register below.", "danger")
-            return redirect(url_for("register"))
+            flash("Invalid username or password.", "danger")
     return render_template("login.html", form=form)
+
 
 
 # --- Logout ---
