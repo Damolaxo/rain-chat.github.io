@@ -14,20 +14,22 @@
   {% block head %}{% endblock %}
 </head>
 <body>
+  <!-- Flash messages -->
   <div class="flash-wrap">
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-      {% for category, message in messages %}
-        <div class="flash flash-{{ category }}">{{ message }}</div>
-      {% endfor %}
-    {% endif %}
-  {% endwith %}
-</div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+  </div>
+
   <!-- Header -->
   <header class="site-header">
     <div class="header-inner">
       <a class="brand" href="{{ url_for('index') }}">
-        <img src="{{ url_for('static', filename='uploads/rain_logo.png') }}" alt="RAIN Logo" class="brand-logo">
+        <img src="{{ url_for('static', filename='images/rain_logo.png') }}" alt="RAIN Logo" class="brand-logo">
         <span class="brand-text">RAIN Chat</span>
       </a>
 
@@ -47,17 +49,6 @@
     </div>
   </header>
 
-  <!-- Flash messages -->
-  <div class="flash-messages">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="flash {{ category }}">{{ message }}</div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
-  </div>
-
   <!-- Main content -->
   <main class="main-container">
     <div class="page-body">
@@ -67,7 +58,7 @@
 
   <!-- Footer -->
   <footer class="site-footer">
-    &copy; {{ current_year or 2025 }} Robotic & Artificial Intelligence in Nigeria — RAIN Chat
+    &copy; {{ current_year }} Robotic & Artificial Intelligence in Nigeria — RAIN Chat
   </footer>
 
   <!-- Scripts -->
