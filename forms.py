@@ -1,28 +1,23 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, TextAreaField, BooleanField, FileField, SubmitField, SelectField
-from wtforms.validators import DataRequired, Length, EqualTo, Email
+from wtforms import StringField, PasswordField, SubmitField, TextAreaField
+from wtforms.validators import DataRequired, Email, EqualTo, Length
 
-class RegistrationForm(FlaskForm):
-    username = StringField("Username", validators=[DataRequired(), Length(min=3, max=20)])
+class RegisterForm(FlaskForm):
+    name = StringField("Full name", validators=[DataRequired(), Length(max=120)])
+    email = StringField("Email", validators=[DataRequired(), Email(), Length(max=200)])
+    nickname = StringField("Nickname", validators=[DataRequired(), Length(max=80)])
+    phone = StringField("Phone", validators=[DataRequired(), Length(max=30)])
     password = PasswordField("Password", validators=[DataRequired(), Length(min=6)])
-    confirm = PasswordField("Confirm Password", validators=[DataRequired(), EqualTo("password")])
-    name = StringField("Full Name", validators=[DataRequired(), Length(min=2, max=50)])
-    email = StringField("Email", validators=[DataRequired(), Email()])
+    confirm = PasswordField("Confirm Password", validators=[DataRequired(), EqualTo('password')])
     submit = SubmitField("Register")
 
-
 class LoginForm(FlaskForm):
-    username = StringField("Username", validators=[DataRequired()])
+    email = StringField("Email", validators=[DataRequired(), Email()])
     password = PasswordField("Password", validators=[DataRequired()])
     submit = SubmitField("Login")
 
 class ProfileForm(FlaskForm):
-    name = StringField("Name", validators=[Length(max=120)])
+    name = StringField("Full name")
+    nickname = StringField("Nickname")
     bio = TextAreaField("Bio")
-    avatar = FileField("Profile picture")
-    submit = SubmitField("Update Profile")
-
-class RoomForm(FlaskForm):
-    name = StringField("Room name", validators=[DataRequired(), Length(max=120)])
-    private = BooleanField("Private")
-    submit = SubmitField("Create room")
+    submit = SubmitField("Save")
