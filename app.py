@@ -58,71 +58,51 @@ def index():
 
 
 # Register (uses WTForms RegistrationForm)
-@app.route("/register", methods=["GET", "POST"])
+from flask import flash, redirect, url_for, render_template
+from flask_login import login_user, logout_user, login_required
+from .models import db, User
+from .forms import RegistrationForm, LoginForm
+
+@app.route('/register', methods=['GET', 'POST'])
 def register():
     form = RegistrationForm()
     if form.validate_on_submit():
-        # normalize email/username
-        username = form.username.data.strip()
-        email = getattr(form, "email", None)
-        email_val = email.data.strip() if email is not None else None
-
-        # check existing by username OR email if provided
-        existing = None
-        if email_val:
-            existing = User.query.filter((User.username == username) | (User.email == email_val)).first()
-        else:
-            existing = User.query.filter_by(username=username).first()
-
-        if existing:
-            flash("This username or email is already registered. Please log in.", "danger")
+        # check if username/email already exists
+        existing_user = User.query.filter(
+            (User.username == form.username.data) | (User.email == form.email.data)
+        ).first()
+        if existing_user:
+            flash("You have already registered, go to login.", "error")
             return redirect(url_for("login"))
 
         # create user
-        u = User(username=username)
-        # set optional fields depending on form
-        if hasattr(form, "name"):
-            u.name = form.name.data.strip() if form.name.data else None
-        if hasattr(form, "email"):
-            u.email = email_val
-        if hasattr(form, "phone"):
-            u.phone = getattr(form, "phone").data if getattr(form, "phone", None) else None
-        if hasattr(form, "gender"):
-            u.gender = getattr(form, "gender").data if getattr(form, "gender", None) else None
-
-        # password helper from your models
-        u.set_password(form.password.data)
-        db.session.add(u)
+        new_user = User(
+            username=form.username.data,
+            name=form.name.data,
+            email=form.email.data
+        )
+        new_user.set_password(form.password.data)
+        db.session.add(new_user)
         db.session.commit()
 
-        flash("✅ You have successfully registered. Please log in.", "success")
+        flash("You have successfully registered! Please login.", "success")
         return redirect(url_for("login"))
+
     return render_template("register.html", form=form)
 
 
 # Login (uses WTForms LoginForm)
-@app.route("/login", methods=["GET", "POST"])
+@app.route('/login', methods=['GET', 'POST'])
 def login():
     form = LoginForm()
     if form.validate_on_submit():
-        username_or_email = form.username.data.strip()
-        # try email first, then username
-        user = None
-        if "@" in username_or_email:
-            user = User.query.filter_by(email=username_or_email).first()
-        if not user:
-            user = User.query.filter_by(username=username_or_email).first()
-
+        user = User.query.filter_by(username=form.username.data).first()
         if user and user.check_password(form.password.data):
-            if user.banned:
-                flash("Your account is banned.", "danger")
-                return redirect(url_for("login"))
             login_user(user)
-            flash("✅ You have successfully logged in!", "success")
-            return redirect(url_for("chat"))
+            flash("You have successfully logged in!", "success")
+            return redirect(url_for("chat"))  # redirect to chat/dashboard
         else:
-            flash("Invalid username/email or password. If you don't have an account, please register.", "danger")
-            return redirect(url_for("login"))
+            flash("Invalid username or password.", "error")
     return render_template("login.html", form=form)
 
 
