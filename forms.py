@@ -3,6 +3,7 @@ from wtforms import StringField, PasswordField, SubmitField, TextAreaField
 from wtforms.validators import DataRequired, Email, EqualTo, Length
 
 class RegisterForm(FlaskForm):
+    username = StringField("Username", validators=[DataRequired()])
     name = StringField("Full name", validators=[DataRequired(), Length(max=120)])
     email = StringField("Email", validators=[DataRequired(), Email(), Length(max=200)])
     nickname = StringField("Nickname", validators=[DataRequired(), Length(max=80)])
